@@ -22,7 +22,7 @@ const sheets = google.sheets({ version: "v4", auth });
 
 // مساعد: يجلب كل صفوف الورقة
 async function getSheetRows() {
-  const range = `${SHEET_NAME}!A:I`; // حتى العامود I
+  const range = `${SHEET_NAME}!A:I`; // حتى العمود I
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
     range
@@ -30,7 +30,7 @@ async function getSheetRows() {
   return res.data.values || [];
 }
 
-// مساعد: تقسيم كتل الطلبات داخل نص العامود I
+// مساعد: تقسيم كتل الطلبات داخل نص العمود I
 function splitBlocks(raw) {
   return (raw || "")
     .split("||")
@@ -55,7 +55,6 @@ function injectResponseAndStatus(block, responseText, decision) {
     const line = lines[i];
     result.push(line);
     if (!inserted && line.trim().startsWith("رابط الملف:")) {
-      // ندخل أسطر بعد هذا السطر
       result.push(`الرد: ${responseText || "—"}`);
       const status = decision === "accept" ? "تم قبول الطلب" : "تم رفض الطلب";
       result.push(`الحالة: ${status}`);
@@ -63,7 +62,6 @@ function injectResponseAndStatus(block, responseText, decision) {
     }
   }
 
-  // إذا لم نجد "رابط الملف:" نضعهم في نهاية الكتلة
   if (!inserted) {
     result.push(`الرد: ${responseText || "—"}`);
     const status = decision === "accept" ? "تم قبول الطلب" : "تم رفض الطلب";
@@ -73,7 +71,7 @@ function injectResponseAndStatus(block, responseText, decision) {
   return result.join("\n");
 }
 
-// GET /orders — يعيد محتويات العامود I لكل صف
+// GET /orders — يعيد محتويات العمود I مع الاسم ورقم الدخول لكل صف
 app.get("/orders", async (req, res) => {
   try {
     const rows = await getSheetRows();
@@ -81,8 +79,10 @@ app.get("/orders", async (req, res) => {
 
     const header = rows[0];
     const orderColIndex = header.findIndex(h => h && h.trim().toLowerCase() === "order");
-    // إن لم يوجد عامود باسم 'order' نحاول استخدام I مباشرة
-    const I_INDEX = 8; // صفرّي: A=0 ... I=8
+    const nameColIndex = header.findIndex(h => h && h.trim().toLowerCase() === "name");
+    const loginColIndex = header.findIndex(h => h && h.trim().toLowerCase() === "loginnumber");
+
+    const I_INDEX = 8; // العمود I
     const colIndex = orderColIndex >= 0 ? orderColIndex : I_INDEX;
 
     const data = [];
@@ -90,7 +90,12 @@ app.get("/orders", async (req, res) => {
       const row = rows[r];
       const rawText = (row[colIndex] || "").trim();
       if (!rawText) continue;
-      data.push({ rowIndex: r + 1, rawText }); // +1 لأن A1 notation
+      data.push({
+        rowIndex: r + 1,
+        rawText,
+        name: row[nameColIndex] || "",
+        loginNumber: row[loginColIndex] || ""
+      });
     }
 
     res.json(data);
@@ -119,7 +124,6 @@ app.post("/orders/:id/respond", async (req, res) => {
 
     let found = false;
 
-    // نبحث في كل صف ضمن العامود I عن كتلة فيها المعرف
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
       const rawText = (row[colIndex] || "").trim();
